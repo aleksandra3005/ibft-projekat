@@ -38,26 +38,30 @@ func main() {
 
 func pokreniSimulaciju(scenario int) {
 	validatorIDs := []int{0, 1, 2, 3}
-	nodes := make(map[int]*consensus.IBFTNode)
+	nodes := make(map[int]*consensus.IBFTNode) // Pravi mapu u kojoj ćemo čuvati objekte čvorova
 
+	// Kreira 4 nova čvora sa početnom vrednošću VREDNOST_ZA_BLOK_1
 	for _, id := range validatorIDs {
 		nodes[id] = consensus.NewIBFTNode(id, "VREDNOST_ZA_BLOK_1", validatorIDs)
 	}
+	// Povezuje čvorove. Svaki čvor dobija kanale (adrese) svih ostalih da bi mogli da komuniciraju
 	for _, node := range nodes {
 		for id, peer := range nodes {
 			node.PeerChans[id] = peer.MsgChan
 		}
 	}
+	// Pokreće svaki čvor u posebnoj gorutini (thread-u) tako da svi rade istovremeno
 	for _, node := range nodes {
 		go node.Run()
 	}
 
+	// Kratka pauza da se svi čvorovi stabilizuju pre početka akcije
 	time.Sleep(200 * time.Millisecond)
 
 	switch scenario {
 	case 1:
 		fmt.Println("\n>>> SCENARIO 1: Sve radi ispravno...")
-		// Umesto samo nodes[1], pokrećemo sve.
+		// Svi čvorovi započinju prvu rundu
 		// Node koji po formuli (Lambda+Round)%4 ispadne lider, taj će započeti.
 		for _, n := range nodes {
 			go n.Start(1, 1, "VREDNOST_ZA_BLOK_1", nil)
@@ -65,10 +69,13 @@ func pokreniSimulaciju(scenario int) {
 
 	case 2:
 		fmt.Println("\n>>> SCENARIO 2: Lider Node 1 je mrtav. Cekamo Round Change...")
+		// Odmah gasimo čvor 1  Lider je "mrtav"
+		// stali čvorovi će čekati poruku od njega, ali pošto je on lider i nema ga, aktiviraće se njihovi tajmeri i preći će u Rundu 2
 		nodes[1].Stop()
 
 	case 3:
 		fmt.Println("\n>>> SCENARIO 3: Node 0 i 3 padaju pre pocetka. Lider nece imati kvorum...")
+		// Pošto su za kvorum potrebna 3 glasa, a samo su 2 čvora živa, dogovor nikada neće biti postignut
 		nodes[0].Stop()
 		nodes[3].Stop()
 		time.Sleep(100 * time.Millisecond)
@@ -88,12 +95,13 @@ func pokreniSimulaciju(scenario int) {
 
 	case 4:
 		fmt.Println("\n>>> SCENARIO 4: Svi se pripreme, pa Node 0 i 3 padnu pre slanja Commit-a...")
+		// Testiramo šta se dešava kada mreža ostane bez kvoruma u najkritičnijem trenutku
 
 		// Aktiviramo automatski kvar za čvorove 0 i 3
 		nodes[0].Scenario4Fail = true
 		nodes[3].Scenario4Fail = true
 
-		// 1. Pokreni SVE čvorove da bi pravi lider (Node 2) poslao predlog
+		// Pokreni SVE čvorove da bi pravi lider (Node 2) poslao predlog
 		for _, n := range nodes {
 			go n.Start(1, 1, "VREDNOST_ZA_BLOK_1", nil)
 		}
@@ -122,8 +130,9 @@ func pokreniSimulaciju(scenario int) {
 	case 6:
 		fmt.Println("\n>>> SCENARIO 6: Vizantijski lider (Node 2) salje razlicite vrednosti...")
 
-		// Ručno nateramo čvorove da ispišu svoje uloge za prvu rundu
+		// Prolazi kroz sve čvorove da im postavi uloge za prvu rundu
 		for _, n := range nodes {
+			// Računa ko je po protokolu lider za Rundu 1 (to je Node 2)
 			aktuelniLider := (n.Lambda + n.Round) % len(n.Validators)
 			if n.ID == aktuelniLider {
 				n.Log("Ja sam LIDER. (Spremam se da šaljem različite poruke...)")
@@ -132,17 +141,16 @@ func pokreniSimulaciju(scenario int) {
 			}
 		}
 
-		// Ručno ćemo pokrenuti Node 1 da bi poslao različite poruke
 		time.Sleep(100 * time.Millisecond)
 
-		// Lider (Node 1) šalje Node-u 0 i 2 VREDNOST_X
+		// Lider (Node 2) šalje Node-u 0 i 2 VREDNOST X
 		msg1 := consensus.IBFTMessage{
 			Type: "PRE-PREPARE", Lambda: 1, Round: 1, Value: "VREDNOST_ZA_BLOK_1_X", SenderID: 2,
 		}
 		nodes[0].MsgChan <- msg1
 		nodes[2].MsgChan <- msg1
 
-		// Lider (Node 1) šalje Node-u 3 VREDNOST_Y
+		// Lider (Node 2) šalje Node-u 3 i 1 VREDNOST Y
 		msg2 := consensus.IBFTMessage{
 			Type: "PRE-PREPARE", Lambda: 1, Round: 1, Value: "VREDNOST_ZA_BLOK_1_Y", SenderID: 2,
 		}
@@ -172,7 +180,7 @@ func pokreniSimulaciju(scenario int) {
 		fmt.Println("[KORAK 1: Runda 1 kreće normalno. Čvorovi 0, 1 i 3 treba da se zaključaju...]")
 		nodes[1].Start(1, 1, "VREDNOST_ZA_BLOK_1", nil)
 
-		// 4. Čekamo dovoljno da se svi zaključaju (3 sekunde je sigurno)
+		// 4. Čekamo dovoljno da se svi zaključaju (da prime PrePrepare i pošalju Prepare glasove)
 		time.Sleep(2 * time.Second)
 
 		fmt.Println("\n[KORAK 2: Čvor 1 su zaključali i pali. Node 0 i 3 je ostao sam i ZAKLJUČAN.]")
