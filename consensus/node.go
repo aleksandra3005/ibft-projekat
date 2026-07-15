@@ -76,6 +76,10 @@ func (n *IBFTNode) HandleMessage(msg IBFTMessage) {
 
 	switch msg.Type { // Razvrstava poruke na tipove: PrePrepare, Prepare, Commit, i RoundChange
 	case PrePrepare:
+		if msg.Round != n.Round {
+			return
+		} // Ignoriši ako runda nije ista
+
 		// Ako smo već u ovoj rundi poslali Prepare, ignorišemo dupli Pre-Prepare
 		if n.PR == n.Round {
 			return
@@ -113,6 +117,10 @@ func (n *IBFTNode) HandleMessage(msg IBFTMessage) {
 		n.Broadcast(prepareMsg)
 
 	case Prepare:
+		if msg.Round != n.Round {
+			return
+		} // Ignoriši ako runda nije ista
+
 		if n.Decided {
 			return
 		} // Ako je blok gotov, ne gledaj više Prepare
@@ -172,6 +180,10 @@ func (n *IBFTNode) HandleMessage(msg IBFTMessage) {
 		}
 
 	case Commit:
+		if msg.Round != n.Round {
+			return
+		}
+
 		if n.Decided {
 			return
 		} // Ignoriši sve ako je konsenzus već postignut
@@ -318,6 +330,7 @@ func (n *IBFTNode) OnTimerExpire() {
 	}
 
 	n.Round++
+	n.Timer.Stop() // Zaustavljamo stari tajmer pre nego što pokrenemo novi
 	n.Log("TAJMER ISTEKAO! Prelazim na Rundu %d. Saljem ROUND-CHANGE...", n.Round)
 
 	// Briše (resetuje) sve glasove za Prepare i Commit iz prethodne runde
@@ -351,7 +364,7 @@ func (n *IBFTNode) SelectValueFromRC() string {
 	highestPR := -1           // inicializacija
 	highestPV := n.InputValue // Default ako niko ništa nije pripremio
 
-	// zima iz memorije sve RoundChange poruke koje su stigle od drugih čvorova za trenutnu rundu
+	// uzima iz memorije sve RoundChange poruke koje su stigle od drugih čvorova za trenutnu rundu
 	msgs, postojanje := n.RCStore[n.Round]
 	// Ako slučajno nema nijedne poruke u memoriji, vraća početnu vrednost
 	if !postojanje {
@@ -412,7 +425,7 @@ func (n *IBFTNode) NextInstance() {
 	} // Ako je čvor ugašen, ne radi ništa i ne piši logove
 
 	n.Lambda++  // povecavamo redni br bloka
-	n.Round = 1 // reserujemo rundu na pocetnu
+	n.Round = 1 // resetujemo rundu na pocetnu
 	n.PR = -1
 	n.PV = ""
 	n.Decided = false // Resetuje status odluke

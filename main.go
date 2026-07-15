@@ -68,10 +68,17 @@ func pokreniSimulaciju(scenario int) {
 		}
 
 	case 2:
-		fmt.Println("\n>>> SCENARIO 2: Lider Node 1 je mrtav. Cekamo Round Change...")
-		// Odmah gasimo čvor 1  Lider je "mrtav"
+		fmt.Println("\n>>> SCENARIO 2: Lider Node 2 je mrtav. Cekamo Round Change...")
+		// Odmah gasimo čvor 2 - Lider je "mrtav"
 		// stali čvorovi će čekati poruku od njega, ali pošto je on lider i nema ga, aktiviraće se njihovi tajmeri i preći će u Rundu 2
-		nodes[1].Stop()
+		nodes[2].Stop()
+
+		// Pokrećemo proces na ostalim čvorovima (0, 1, 3)
+		for _, n := range nodes {
+			if !n.IsOffline {
+				go n.Start(1, 1, "VREDNOST_ZA_BLOK_1", nil)
+			}
+		}
 
 	case 3:
 		fmt.Println("\n>>> SCENARIO 3: Node 0 i 3 padaju pre pocetka. Lider nece imati kvorum...")
@@ -87,7 +94,7 @@ func pokreniSimulaciju(scenario int) {
 			}
 		}
 
-		time.Sleep(6 * time.Second) // Sačekamo da tajmer od 5s istekne i ispiše promenu runde
+		time.Sleep(6 * time.Second) // Sačekamo da tajmer istekne i ispiše promenu runde
 		fmt.Println("\n[Scenario 3: Videli smo pokretanje Round Change, zaustavljam cvorove...]")
 		for _, n := range nodes {
 			n.Stop()
