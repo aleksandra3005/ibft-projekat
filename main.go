@@ -190,7 +190,7 @@ func pokreniSimulaciju(scenario int) {
 		// 4. Čekamo dovoljno da se svi zaključaju (da prime PrePrepare i pošalju Prepare glasove)
 		time.Sleep(2 * time.Second)
 
-		fmt.Println("\n[KORAK 2: Čvor 1 su zaključali i pali. Node 0 i 3 je ostao sam i ZAKLJUČAN.]")
+		fmt.Println("\n[KORAK 2: Čvor 1 je zaključan i pao je. Node 0 i 3 je ostao sam i ZAKLJUČAN.]")
 		fmt.Println("[Sada budimo Node 2 (on je lider za Rundu 2) i čekamo Timeout...]")
 
 		nodes[2].IsOffline = false
