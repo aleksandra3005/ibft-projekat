@@ -16,7 +16,7 @@ type IBFTMessage struct {
 	Value    string // Vrednost (predlog bloka)
 	SenderID int    // ID validatora koji šalje poruku
 
-	Signature []byte
+	Signature []byte // "digitalni pečat" koji dokazuje ko je poslao poruku i da ona nije menjana
 
 	// Polja za Round-Change
 	PreparedRound int

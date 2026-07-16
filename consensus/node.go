@@ -43,7 +43,7 @@ type IBFTNode struct {
 	LastStartedRound int // Pomoćna promenljiva da čvor ne bi više puta pokretao istu rundu
 
 	// Kriptografski ključevi
-	PrivateKey     *ecdsa.PrivateKey        // Moj privatni ključ za potpisivanje
+	PrivateKey     *ecdsa.PrivateKey        // Privatni ključ za potpisivanje
 	PeerPublicKeys map[int]*ecdsa.PublicKey // Javni ključevi svih ostalih validatora
 }
 
@@ -70,17 +70,18 @@ func NewIBFTNode(id int, input string, allValidators []int) *IBFTNode {
 		PeerPublicKeys:   make(map[int]*ecdsa.PublicKey),
 	}
 
-	// Generiši ključeve
+	// Generisanje ključeva - Svaki put kad napravimo čvor, on dobije jedinstven identitet
 	privKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	n.PrivateKey = privKey
 	return n
 }
 
-// Pomoćna funkcija koja potpisuje poruku (koristićemo je i u main.go)
+// Pomoćna funkcija koja potpisuje poruku
 func (n *IBFTNode) SignMessage(msg *IBFTMessage) {
 	msg.Signature = nil // Očistimo potpis pre nego što napravimo hash podataka
 	data, _ := json.Marshal(msg)
-	hash := sha256.Sum256(data)
+	hash := sha256.Sum256(data) // hash (digitalni otisak)
+	// Privatnim ključem se taj hash "zaključa" u digitalni potpis i ubaci nazad u poruku
 	sig, _ := ecdsa.SignASN1(rand.Reader, n.PrivateKey, hash[:])
 	msg.Signature = sig
 }
@@ -104,6 +105,7 @@ func (n *IBFTNode) HandleMessage(msg IBFTMessage) {
 	} // Ako je mrtav, ne prima poruke
 
 	// Verifikacija potpisa
+	// Čvor traži javni ključ pošiljaoca u svojoj mapi. Ako ga nema, poruka je od nepoznate osobe i odmah se odbacuje
 	pubKey, ok := n.PeerPublicKeys[msg.SenderID]
 	if !ok || pubKey == nil {
 		n.Log("UPOZORENJE: Nemam javni kljuc za Node %d, odbacujem poruku.", msg.SenderID)
@@ -115,6 +117,7 @@ func (n *IBFTNode) HandleMessage(msg IBFTMessage) {
 	data, _ := json.Marshal(msg)
 	hash := sha256.Sum256(data)
 
+	// Ako se hash koji je čvor izračunao poklapa sa onim što je unutar potpisa (otključano javnim ključem pošiljaoca), poruka je validna
 	if !ecdsa.VerifyASN1(pubKey, hash[:], sig) {
 		n.Log("ALARM: Nevalidan potpis od Node %d!", msg.SenderID)
 		return

@@ -51,8 +51,7 @@ func pokreniSimulaciju(scenario int) {
 		}
 	}
 
-	// ovde dolazi "podela" javnih ključeva
-
+	// "podela" javnih ključeva
 	for _, n1 := range nodes {
 		for _, n2 := range nodes {
 			// Svaki čvor (n1) dobija javni ključ od svakog drugog čvora (n2)
