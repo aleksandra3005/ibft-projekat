@@ -2,6 +2,12 @@ package consensus
 
 // Uvozimo standardne biblioteke za formatiranje teksta (fmt) i rad sa vremenom (time)
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/json"
+
 	"fmt"
 	"time"
 )
@@ -35,11 +41,15 @@ type IBFTNode struct {
 	RCStore map[int]map[int]IBFTMessage // Round -> SenderID -> Message
 
 	LastStartedRound int // Pomoćna promenljiva da čvor ne bi više puta pokretao istu rundu
+
+	// Kriptografski ključevi
+	PrivateKey     *ecdsa.PrivateKey        // Moj privatni ključ za potpisivanje
+	PeerPublicKeys map[int]*ecdsa.PublicKey // Javni ključevi svih ostalih validatora
 }
 
 // Ova funkcija (konstruktor) pravi novu instancu čvora
 func NewIBFTNode(id int, input string, allValidators []int) *IBFTNode {
-	return &IBFTNode{
+	n := &IBFTNode{
 		ID:                  id,
 		Lambda:              1,
 		Round:               1,
@@ -57,11 +67,30 @@ func NewIBFTNode(id int, input string, allValidators []int) *IBFTNode {
 
 		RCStore:          make(map[int]map[int]IBFTMessage),
 		LastStartedRound: 0,
+		PeerPublicKeys:   make(map[int]*ecdsa.PublicKey),
 	}
+
+	// Generiši ključeve
+	privKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	n.PrivateKey = privKey
+	return n
+}
+
+// Pomoćna funkcija koja potpisuje poruku (koristićemo je i u main.go)
+func (n *IBFTNode) SignMessage(msg *IBFTMessage) {
+	msg.Signature = nil // Očistimo potpis pre nego što napravimo hash podataka
+	data, _ := json.Marshal(msg)
+	hash := sha256.Sum256(data)
+	sig, _ := ecdsa.SignASN1(rand.Reader, n.PrivateKey, hash[:])
+	msg.Signature = sig
 }
 
 // Broadcast salje poruku svim validatorima (ukljucujuci i sebe)
 func (n *IBFTNode) Broadcast(msg IBFTMessage) {
+	// Potpisivanje poruke pre slanja
+
+	n.SignMessage(&msg) // Potpisujemo poruku pre nego što ode na mrežu                                         // 4. Ubacimo potpis u poruku
+
 	// Prolazi kroz mapu kanala svih ostalih čvorova
 	for _, peerChan := range n.PeerChans {
 		peerChan <- msg // Ubacuje poruku u kanal svakog čvora (šalje im poruku)
@@ -73,6 +102,24 @@ func (n *IBFTNode) HandleMessage(msg IBFTMessage) {
 	if n.IsOffline {
 		return
 	} // Ako je mrtav, ne prima poruke
+
+	// Verifikacija potpisa
+	pubKey, ok := n.PeerPublicKeys[msg.SenderID]
+	if !ok || pubKey == nil {
+		n.Log("UPOZORENJE: Nemam javni kljuc za Node %d, odbacujem poruku.", msg.SenderID)
+		return
+	}
+
+	sig := msg.Signature
+	msg.Signature = nil // Privremeno sklanjamo potpis radi provere hasha
+	data, _ := json.Marshal(msg)
+	hash := sha256.Sum256(data)
+
+	if !ecdsa.VerifyASN1(pubKey, hash[:], sig) {
+		n.Log("ALARM: Nevalidan potpis od Node %d!", msg.SenderID)
+		return
+	}
+	msg.Signature = sig // Vraćamo potpis nazad u poruku nakon provere
 
 	switch msg.Type { // Razvrstava poruke na tipove: PrePrepare, Prepare, Commit, i RoundChange
 	case PrePrepare:
@@ -207,6 +254,7 @@ func (n *IBFTNode) HandleMessage(msg IBFTMessage) {
 			// SCENARIO 5: Simuliramo da upis u bazu ne uspe
 			if n.SimulateInsertError {
 				n.Log("!!! GRESKA PRI UPISU U BAZU !!! Ne mogu da finalizujem blok.")
+				// n.Decided = true
 				return
 			}
 

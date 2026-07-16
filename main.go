@@ -50,6 +50,16 @@ func pokreniSimulaciju(scenario int) {
 			node.PeerChans[id] = peer.MsgChan
 		}
 	}
+
+	// ovde dolazi "podela" javnih ključeva
+
+	for _, n1 := range nodes {
+		for _, n2 := range nodes {
+			// Svaki čvor (n1) dobija javni ključ od svakog drugog čvora (n2)
+			n1.PeerPublicKeys[n2.ID] = &n2.PrivateKey.PublicKey
+		}
+	}
+
 	// Pokreće svaki čvor u posebnoj gorutini (thread-u) tako da svi rade istovremeno
 	for _, node := range nodes {
 		go node.Run()
@@ -154,13 +164,16 @@ func pokreniSimulaciju(scenario int) {
 		msg1 := consensus.IBFTMessage{
 			Type: "PRE-PREPARE", Lambda: 1, Round: 1, Value: "VREDNOST_ZA_BLOK_1_X", SenderID: 2,
 		}
-		nodes[0].MsgChan <- msg1
-		nodes[2].MsgChan <- msg1
+		nodes[2].SignMessage(&msg1) // <-- KLJUČNI DODATAK: Node 2 potpisuje svoju laž
 
 		// Lider (Node 2) šalje Node-u 3 i 1 VREDNOST Y
 		msg2 := consensus.IBFTMessage{
 			Type: "PRE-PREPARE", Lambda: 1, Round: 1, Value: "VREDNOST_ZA_BLOK_1_Y", SenderID: 2,
 		}
+		nodes[2].SignMessage(&msg2) // <-- KLJUČNI DODATAK
+
+		nodes[0].MsgChan <- msg1
+		nodes[2].MsgChan <- msg1
 		nodes[3].MsgChan <- msg2
 		nodes[1].MsgChan <- msg2
 

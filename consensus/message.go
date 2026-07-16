@@ -16,6 +16,8 @@ type IBFTMessage struct {
 	Value    string // Vrednost (predlog bloka)
 	SenderID int    // ID validatora koji šalje poruku
 
+	Signature []byte
+
 	// Polja za Round-Change
 	PreparedRound int
 	PreparedValue string
